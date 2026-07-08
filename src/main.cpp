@@ -66,7 +66,7 @@ Servo servoFontCam; // Tao doi tuong servo cho camera truoc.
 Servo servoRearCam; // Tao doi tuong servo cho camera sau.
 Servo servoOled;    // Tao doi tuong servo cho co cau OLED.
 
-U8G2_SH1106_128X64_NONAME_F_HW_I2C oled(U8G2_R2, U8X8_PIN_NONE); // Tao driver OLED SH1106 full-buffer de render muot.
+U8G2_SH1106_128X64_NONAME_1_HW_I2C oled(U8G2_R2, U8X8_PIN_NONE); // Tao driver OLED SH1106 page-buffer de giam SRAM.
 
 enum class OledServoState : uint8_t // Khai bao cac trang thai cua chu ky servo OLED.
 {                                   // Bat dau danh sach trang thai servo OLED.
@@ -448,16 +448,19 @@ void drawOledDigits(uint8_t p1, uint8_t p2, uint8_t p3) // Ve ba nhom chu so len
 
 void renderOledContent(bool logRender) // Ve lai noi dung OLED theo che do hien tai.
 {                                      // Bat dau ham render OLED.
-  oled.clearBuffer();                  // Xoa full-buffer ve cua OLED.
-  oled.setDrawColor(1);                // Dat mau ve la trang/bat pixel.
+  oled.firstPage();                    // Bat dau chu ky ve tung page cua OLED.
 
-  if (oledContentMode == OledContentMode::DIGITS)          // Kiem tra co can ve chu so khong.
-  {                                                        // Bat dau nhanh ve chu so.
-    drawOledDigits(oledDigitP1, oledDigitP2, oledDigitP3); // Ve cac chu so dang luu.
-  } // Ket thuc nhanh ve chu so.
+  do // Lap lai lenh ve cho moi page buffer.
+  {  // Bat dau khoi ve noi dung OLED.
+    oled.setDrawColor(1); // Dat mau ve la trang/bat pixel.
 
-  drawOledStatusDot(); // Ve cham trang thai len buffer.
-  oled.sendBuffer();   // Gui full-buffer da ve ra man hinh OLED.
+    if (oledContentMode == OledContentMode::DIGITS)          // Kiem tra co can ve chu so khong.
+    {                                                        // Bat dau nhanh ve chu so.
+      drawOledDigits(oledDigitP1, oledDigitP2, oledDigitP3); // Ve cac chu so dang luu.
+    } // Ket thuc nhanh ve chu so.
+
+    drawOledStatusDot(); // Ve cham trang thai len page hien tai.
+  } while (oled.nextPage()); // Ket thuc chu ky ve tung page cua OLED.
 
 #if SERIAL_DEBUG_ENABLE                             // Chi bien dich log render khi debug dang bat.
   if (logRender)                                    // Kiem tra lan render nay co can ghi log khong.

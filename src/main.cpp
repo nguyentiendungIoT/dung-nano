@@ -3,7 +3,9 @@
 #include <Servo.h>   // Nap thu vien dieu khien cac servo con lai trong he thong.
 #include <U8g2lib.h> // Nap thu vien dieu khien man hinh OLED SH1106.
 
-#define SERIAL_DEBUG_ENABLE 1 // Bat log debug qua Serial; doi thanh 0 neu muon tat log.
+#define SERIAL_DEBUG_ENABLE 0      // Tat log debug qua Serial de kenh lenh 9600 baud chay yen lang.
+#define INA3221_VALUE_LOG_ENABLE 1 // Bat log rieng gia tri dien ap/dong dien INA3221.
+#define OLED_DOT_LOG_ENABLE 1      // Bat log rieng trang thai cham OLED.
 
 constexpr uint8_t PIN_RELAY_BPLUS = 9;   // Gan chan D9 cho relay B+.
 constexpr uint8_t PIN_RELAY_D10 = 10;    // Gan chan D10 cho relay bo sung 1.
@@ -16,15 +18,16 @@ constexpr uint8_t PIN_SERVO_OLED = 3;    // Gan chan D3 cho servo OLED.
 constexpr uint8_t RELAY_ON = HIGH; // Dinh nghia muc tin hieu bat relay.
 constexpr uint8_t RELAY_OFF = LOW; // Dinh nghia muc tin hieu tat relay.
 
-constexpr uint32_t SERIAL_BAUDRATE = 9600; // Dinh nghia toc do Serial 9600 baud.
-constexpr uint32_t RX_TIMEOUT_MS = 35;     // Dinh nghia thoi gian cho de ket thuc lenh khong co xuong dong.
-constexpr size_t RX_BUFFER_SIZE = 16;      // Dinh nghia kich thuoc bo dem nhan lenh Serial.
+constexpr uint32_t SERIAL_BAUDRATE = 9600;   // Dinh nghia toc do Serial 9600 baud.
+constexpr uint32_t RX_TIMEOUT_MS = 35;       // Dinh nghia thoi gian cho de ket thuc lenh khong co xuong dong.
+constexpr size_t RX_BUFFER_SIZE = 16;        // Dinh nghia kich thuoc bo dem nhan lenh Serial.
+constexpr uint32_t I2C_TIMEOUT_US = 25000UL; // Timeout 25 ms de tranh treo khi bus I2C loi.
 
 constexpr uint8_t SERVO_FONTCAM_HOME_ANGLE = 0;  // Dinh nghia goc home cua servo camera truoc.
-constexpr uint8_t SERVO_FONTCAM_WORK_ANGLE = 15; // Dinh nghia goc lam viec cua servo camera truoc.
+constexpr uint8_t SERVO_FONTCAM_WORK_ANGLE = 17; // Dinh nghia goc lam viec cua servo camera truoc.
 
-constexpr uint8_t SERVO_REARCAM_HOME_ANGLE = 0;  // Dinh nghia goc home cua servo camera sau.
-constexpr uint8_t SERVO_REARCAM_WORK_ANGLE = 15; // Dinh nghia goc lam viec cua servo camera sau.
+constexpr uint8_t SERVO_REARCAM_HOME_ANGLE = 25; // Dinh nghia goc home cua servo camera sau.
+constexpr uint8_t SERVO_REARCAM_WORK_ANGLE = 13; // Dinh nghia goc lam viec cua servo camera sau.
 constexpr uint8_t SERVO_ANGLE_UNKNOWN = 255;     // Dinh nghia gia tri danh dau chua biet goc servo.
 
 constexpr uint8_t SERVO_OLED_MIN_ANGLE = 0;         // Dinh nghia goc ban dau cua servo OLED.
@@ -34,7 +37,7 @@ constexpr uint16_t SERVO_OLED_MAX_PULSE_US = 2400;  // Dinh nghia xung lon nhat 
 constexpr uint32_t SERVO_OLED_BOOST_MS = 160;       // Dinh nghia thoi gian day xung tang toc cho servo OLED.
 constexpr uint32_t SERVO_OLED_TARGET_HOLD_MS = 300; // Dinh nghia thoi gian giu servo OLED o goc dich.
 
-constexpr uint32_t OLED_I2C_CLOCK_HZ = 400000UL; // Dinh nghia toc do bus I2C cua OLED.
+constexpr uint32_t OLED_I2C_CLOCK_HZ = 400000UL; // Dung 400 kHz de cap nhat OLED muot hon.
 constexpr uint8_t OLED_DISPLAY_CLOCK = 0xF0;     // Dinh nghia clock noi bo cua OLED.
 constexpr uint8_t OLED_CONTRAST = 255;           // Dinh nghia do tuong phan OLED toi da.
 
@@ -43,21 +46,23 @@ constexpr uint8_t OLED_STATUS_DOT_X = 122;            // Dinh nghia toa do X cua
 constexpr uint8_t OLED_STATUS_DOT_Y = 58;             // Dinh nghia toa do Y cua cham trang thai.
 constexpr uint8_t OLED_STATUS_DOT_RADIUS = 5;         // Dinh nghia ban kinh cham trang thai.
 
-constexpr uint8_t INA3221_I2C_ADDRESS = 0x40;            // Dia chi mac dinh khi chan A0 noi GND.
-constexpr uint8_t INA3221_REGISTER_CONFIG = 0x00;        // Thanh ghi cau hinh INA3221.
-constexpr uint8_t INA3221_REGISTER_CH1_SHUNT = 0x01;     // Thanh ghi shunt voltage kenh 1.
-constexpr uint8_t INA3221_REGISTER_CH1_BUS = 0x02;       // Thanh ghi bus voltage kenh 1.
-constexpr uint16_t INA3221_CONFIG_DEFAULT = 0x7127;      // Bat 3 kenh, do lien tuc shunt + bus.
-constexpr uint32_t INA3221_SAMPLE_INTERVAL_MS = 200;     // Chu ky doc INA3221 la 0,2 giay.
-constexpr float INA3221_BUS_LSB_V = 0.008f;              // Bus voltage LSB sau khi bo 3 bit reserve.
-constexpr float INA3221_SHUNT_LSB_V = 0.000040f;         // Shunt voltage LSB sau khi bo 3 bit reserve.
-constexpr float INA3221_SHUNT_RESISTOR_OHMS = 0.1f;      // Gia tri shunt R100 thuong gap tren module.
+constexpr uint8_t INA3221_I2C_ADDRESS_DEFAULT = 0x40; // Dia chi mac dinh khi chan A0 noi GND.
+constexpr uint8_t INA3221_I2C_ADDRESS_MIN = 0x40;     // Dia chi dau tien trong nhom A0 cua INA3221.
+constexpr uint8_t INA3221_I2C_ADDRESS_MAX = 0x43;     // Dia chi cuoi trong nhom A0 cua INA3221.
+constexpr uint8_t INA3221_REGISTER_CONFIG = 0x00;     // Thanh ghi cau hinh INA3221.
+constexpr uint8_t INA3221_REGISTER_CH1_SHUNT = 0x01;  // Thanh ghi shunt voltage kenh 1.
+constexpr uint8_t INA3221_REGISTER_CH1_BUS = 0x02;    // Thanh ghi bus voltage kenh 1.
+constexpr uint16_t INA3221_CONFIG_DEFAULT = 0x7127;   // Bat 3 kenh, do lien tuc shunt + bus.
+constexpr uint32_t INA3221_LOG_INTERVAL_MS = 1000;    // Chu ky in gia tri INA3221 ra Serial.
+constexpr float INA3221_BUS_LSB_V = 0.008f;           // Bus voltage LSB sau khi bo 3 bit reserve.
+constexpr float INA3221_SHUNT_LSB_V = 0.000040f;      // Shunt voltage LSB sau khi bo 3 bit reserve.
+constexpr float INA3221_SHUNT_RESISTOR_OHMS = 0.1f;   // Gia tri shunt R100 thuong gap tren module.
 
 Servo servoFontCam; // Tao doi tuong servo cho camera truoc.
 Servo servoRearCam; // Tao doi tuong servo cho camera sau.
 Servo servoOled;    // Tao doi tuong servo cho co cau OLED.
 
-U8G2_SH1106_128X64_NONAME_F_HW_I2C oled(U8G2_R2, U8X8_PIN_NONE); // Tao driver OLED SH1106 I2C xoay 180 do.
+U8G2_SH1106_128X64_NONAME_F_HW_I2C oled(U8G2_R2, U8X8_PIN_NONE); // Tao driver OLED SH1106 full-buffer de render muot.
 
 enum class OledServoState : uint8_t // Khai bao cac trang thai cua chu ky servo OLED.
 {                                   // Bat dau danh sach trang thai servo OLED.
@@ -75,14 +80,15 @@ enum class OledContentMode : uint8_t // Khai bao cac che do noi dung hien thi OL
 OledServoState oledServoState = OledServoState::IDLE;     // Luu trang thai hien tai cua servo OLED.
 OledContentMode oledContentMode = OledContentMode::CLEAR; // Luu che do noi dung hien tai cua OLED.
 
-uint8_t rearCamAngle = SERVO_ANGLE_UNKNOWN; // Luu goc gan nhat cua servo camera sau.
-uint8_t oledDigitP1 = 0;                    // Luu chu so nhom 1 de ve len OLED.
-uint8_t oledDigitP2 = 0;                    // Luu so nhom 2 de ve len OLED.
-uint8_t oledDigitP3 = 0;                    // Luu so nhom 3 de ve len OLED.
+uint8_t rearCamAngle = SERVO_ANGLE_UNKNOWN;           // Luu goc gan nhat cua servo camera sau.
+uint8_t ina3221Address = INA3221_I2C_ADDRESS_DEFAULT; // Luu dia chi INA3221 dang duoc firmware su dung.
+uint8_t oledDigitP1 = 0;                              // Luu chu so nhom 1 de ve len OLED.
+uint8_t oledDigitP2 = 0;                              // Luu so nhom 2 de ve len OLED.
+uint8_t oledDigitP3 = 0;                              // Luu so nhom 3 de ve len OLED.
 
 uint32_t oledServoStartMs = 0;          // Luu moc thoi gian bat dau trang thai servo OLED.
 uint32_t oledStatusDotLastToggleMs = 0; // Luu moc thoi gian lan doi cham trang thai gan nhat.
-uint32_t ina3221LastSampleMs = 0;       // Luu moc thoi gian doc INA3221 gan nhat.
+uint32_t ina3221LastLogMs = 0;          // Luu moc thoi gian lan in gia tri INA3221 gan nhat.
 
 bool oledStatusDotVisible = true; // Luu trang thai hien/an cua cham trang thai OLED.
 bool ina3221Online = false;       // Luu trang thai phat hien INA3221 tren bus I2C.
@@ -129,10 +135,36 @@ void logLine(const __FlashStringHelper *, const char *) {}                // Bo 
 void logRxByte(uint8_t) {}                                                // Bo qua log byte Serial khi debug tat.
 #endif // Ket thuc lua chon bien dich log debug.
 
-void configureRelayOutput(uint8_t pin)      // Cau hinh mot chan relay ve trang thai tat an toan.
-{                                           // Bat dau ham cau hinh relay.
-  pinMode(pin, OUTPUT);                     // Dat chan relay la output.
-  digitalWrite(pin, RELAY_OFF);             // Tat relay ngay khi khoi dong.
+bool ina3221ProbeAddress(uint8_t address)          // Kiem tra nhanh mot dia chi co ACK nhu INA3221 khong.
+{                                                  // Bat dau ham probe dia chi INA3221.
+  Wire.beginTransmission(address);                 // Thu mo giao tiep voi dia chi.
+  const uint8_t status = Wire.endTransmission();   // Lay ket qua ACK/NACK/timeout.
+  const bool timedOut = Wire.getWireTimeoutFlag(); // Kiem tra co timeout khong.
+  if (timedOut)                                    // Kiem tra co can xoa co timeout khong.
+  {                                                // Bat dau nhanh xoa co timeout.
+    Wire.clearWireTimeoutFlag();                   // Xoa co timeout de lan probe sau doc dung.
+  } // Ket thuc nhanh xoa co timeout.
+  return status == 0; // Chi bao co thiet bi khi dia chi ACK.
+} // Ket thuc ham probe dia chi INA3221.
+
+bool findIna3221Address() // Tim dia chi INA3221 trong nhom 0x40..0x43.
+{                         // Bat dau ham tim dia chi INA3221.
+  for (uint8_t address = INA3221_I2C_ADDRESS_MIN; address <= INA3221_I2C_ADDRESS_MAX; ++address)
+  {                                   // Bat dau vong lap thu tung dia chi.
+    if (ina3221ProbeAddress(address)) // Kiem tra dia chi hien tai co ACK khong.
+    {                                 // Bat dau nhanh tim thay.
+      ina3221Address = address;       // Luu dia chi INA3221 dang dung.
+      return true;                    // Bao tim thay INA3221.
+    } // Ket thuc nhanh tim thay.
+  } // Ket thuc vong lap thu tung dia chi.
+
+  return false; // Bao khong tim thay INA3221.
+} // Ket thuc ham tim dia chi INA3221.
+
+void configureRelayOutput(uint8_t pin) // Cau hinh mot chan relay ve trang thai tat an toan.
+{                                      // Bat dau ham cau hinh relay.
+  pinMode(pin, OUTPUT);                // Dat chan relay la output.
+  digitalWrite(pin, RELAY_OFF);        // Tat relay ngay khi khoi dong.
 } // Ket thuc ham cau hinh relay.
 
 void relaySet(uint8_t pin, const __FlashStringHelper *name, bool on) // Bat hoac tat relay theo chan chi dinh.
@@ -149,13 +181,13 @@ void setRearCamAngle(uint8_t targetAngle)                                       
 {                                                                                                                                             // Bat dau ham dat goc camera sau.
   if (rearCamAngle == targetAngle)                                                                                                            // Kiem tra servo da o dung goc yeu cau chua.
   {                                                                                                                                           // Bat dau nhanh bo qua neu khong can di chuyen.
-    logLine(F("[ACT] "), targetAngle == SERVO_REARCAM_HOME_ANGLE ? F("ServoRearCam already at 0 deg") : F("ServoRearCam already at 45 deg")); // Ghi log da o san goc yeu cau.
+    logLine(F("[ACT] "), targetAngle == SERVO_REARCAM_HOME_ANGLE ? F("ServoRearCam already at 0 deg") : F("ServoRearCam already at 25 deg")); // Ghi log da o san goc yeu cau.
     return;                                                                                                                                   // Thoat ham vi khong can ghi lai servo.
   } // Ket thuc nhanh bo qua neu khong can di chuyen.
 
   servoRearCam.write(targetAngle);                                                                                          // Gui goc moi den servo camera sau.
   rearCamAngle = targetAngle;                                                                                               // Cap nhat bien nho goc hien tai.
-  logLine(F("[ACT] "), targetAngle == SERVO_REARCAM_HOME_ANGLE ? F("ServoRearCam -> 0 deg") : F("ServoRearCam -> 45 deg")); // Ghi log goc moi.
+  logLine(F("[ACT] "), targetAngle == SERVO_REARCAM_HOME_ANGLE ? F("ServoRearCam -> 0 deg") : F("ServoRearCam -> 25 deg")); // Ghi log goc moi.
 } // Ket thuc ham dat goc camera sau.
 
 void configureOledForCamera()                                                                   // Khoi tao va cau hinh man hinh OLED.
@@ -168,44 +200,64 @@ void configureOledForCamera()                                                   
 } // Ket thuc ham cau hinh OLED.
 
 bool ina3221WriteRegister(uint8_t reg, uint16_t value) // Ghi mot thanh ghi 16-bit cua INA3221.
-{                                                       // Bat dau ham ghi thanh ghi INA3221.
-  Wire.beginTransmission(INA3221_I2C_ADDRESS);          // Bat dau giao tiep voi INA3221.
-  Wire.write(reg);                                      // Chon thanh ghi dich.
-  Wire.write(static_cast<uint8_t>(value >> 8));         // Ghi byte cao truoc theo chuan SMBus word.
-  Wire.write(static_cast<uint8_t>(value & 0xFF));       // Ghi byte thap.
-  return Wire.endTransmission() == 0;                   // Bao thanh cong khi thiet bi ACK.
+{                                                      // Bat dau ham ghi thanh ghi INA3221.
+  Wire.beginTransmission(ina3221Address);              // Bat dau giao tiep voi INA3221.
+  Wire.write(reg);                                     // Chon thanh ghi dich.
+  Wire.write(static_cast<uint8_t>(value >> 8));        // Ghi byte cao truoc theo chuan SMBus word.
+  Wire.write(static_cast<uint8_t>(value & 0xFF));      // Ghi byte thap.
+  const uint8_t status = Wire.endTransmission();       // Lay ket qua ghi thanh ghi.
+  if (status != 0)                                     // Kiem tra IC co ACK thanh cong khong.
+  {                                                    // Bat dau nhanh log loi ghi.
+    return false;                                      // Bao ghi that bai.
+  } // Ket thuc nhanh log loi ghi.
+  return true; // Bao thanh cong khi thiet bi ACK.
 } // Ket thuc ham ghi thanh ghi INA3221.
 
 bool ina3221ReadRegister(uint8_t reg, int16_t &value) // Doc mot thanh ghi 16-bit cua INA3221.
 {                                                     // Bat dau ham doc thanh ghi INA3221.
-  Wire.beginTransmission(INA3221_I2C_ADDRESS);        // Bat dau giao tiep voi INA3221.
+  Wire.beginTransmission(ina3221Address);             // Bat dau giao tiep voi INA3221.
   Wire.write(reg);                                    // Dat con tro thanh ghi can doc.
-  if (Wire.endTransmission(false) != 0)               // Gui repeated-start de doc ngay sau khi chon thanh ghi.
+  const uint8_t status = Wire.endTransmission(false); // Gui repeated-start de doc ngay sau khi chon thanh ghi.
+  if (status != 0)                                    // Kiem tra co dat duoc con tro thanh ghi khong.
   {                                                   // Bat dau nhanh xu ly loi I2C.
     return false;                                     // Bao doc that bai.
   } // Ket thuc nhanh xu ly loi I2C.
 
-  const uint8_t bytesRead = Wire.requestFrom(INA3221_I2C_ADDRESS, static_cast<uint8_t>(2)); // Doc 2 byte du lieu.
-  if (bytesRead != 2)                                                                       // Kiem tra du so byte can doc.
-  {                                                                                         // Bat dau nhanh xu ly thieu byte.
-    return false;                                                                           // Bao doc that bai.
+  const uint8_t bytesRead = Wire.requestFrom(ina3221Address, static_cast<uint8_t>(2)); // Doc 2 byte du lieu.
+  if (bytesRead != 2)                                                                  // Kiem tra du so byte can doc.
+  {                                                                                    // Bat dau nhanh xu ly thieu byte.
+    return false;                                                                      // Bao doc that bai.
   } // Ket thuc nhanh xu ly thieu byte.
 
   const uint16_t raw = static_cast<uint16_t>(Wire.read()) << 8 | static_cast<uint16_t>(Wire.read()); // Ghep byte cao/thap.
-  value = static_cast<int16_t>(raw);                                                                // Giu nguyen dang co dau 16-bit.
-  return true;                                                                                      // Bao doc thanh cong.
+  value = static_cast<int16_t>(raw);                                                                 // Giu nguyen dang co dau 16-bit.
+  return true;                                                                                       // Bao doc thanh cong.
 } // Ket thuc ham doc thanh ghi INA3221.
 
-bool configureIna3221() // Khoi tao INA3221 o che do do lien tuc ca 3 kenh.
-{                       // Bat dau ham cau hinh INA3221.
+bool configureIna3221()       // Khoi tao INA3221 o che do do lien tuc ca 3 kenh.
+{                             // Bat dau ham cau hinh INA3221.
+  int16_t configReadback = 0; // Luu gia tri config doc lai.
+
+  if (!findIna3221Address())                                              // Thu tim dia chi that cua INA3221.
+  {                                                                       // Bat dau nhanh khong thay dia chi.
+    logLine(F("[INA3221] "), F("not found on address range 0x40..0x43")); // Ghi log khong thay INA.
+    return false;                                                         // Bao cau hinh that bai.
+  } // Ket thuc nhanh khong thay dia chi.
+
   if (!ina3221WriteRegister(INA3221_REGISTER_CONFIG, INA3221_CONFIG_DEFAULT)) // Kiem tra thiet bi co ACK khong.
-  {                                                                          // Bat dau nhanh xu ly khong thay INA3221.
-    logLine(F("[INA3221] "), F("not found at 0x40 or config write failed")); // Ghi log loi ket noi/cau hinh.
-    return false;                                                            // Bao cau hinh that bai.
+  {                                                                           // Bat dau nhanh xu ly khong thay INA3221.
+    logLine(F("[INA3221] "), F("config write failed"));                       // Ghi log loi ket noi/cau hinh.
+    return false;                                                             // Bao cau hinh that bai.
   } // Ket thuc nhanh xu ly khong thay INA3221.
 
-  logLine(F("[INA3221] "), F("ready at 0x40, continuous 3-channel mode")); // Ghi log INA3221 san sang.
-  return true;                                                            // Bao cau hinh thanh cong.
+  if (!ina3221ReadRegister(INA3221_REGISTER_CONFIG, configReadback))   // Doc lai config de xac nhan IC dang tra loi.
+  {                                                                    // Bat dau nhanh loi doc config.
+    logLine(F("[INA3221] "), F("config readback failed after write")); // Ghi log loi doc lai config.
+    return false;                                                      // Bao cau hinh that bai.
+  } // Ket thuc nhanh loi doc config.
+
+  logLine(F("[INA3221] "), F("ready, continuous 3-channel mode")); // Ghi log INA3221 san sang.
+  return true;                                                     // Bao cau hinh thanh cong.
 } // Ket thuc ham cau hinh INA3221.
 
 float ina3221RawToVoltage(int16_t raw, float lsbVoltage) // Quy doi gia tri thanh ghi INA3221 sang volt.
@@ -213,16 +265,17 @@ float ina3221RawToVoltage(int16_t raw, float lsbVoltage) // Quy doi gia tri than
   return static_cast<float>(raw / 8) * lsbVoltage;       // Bo 3 bit reserve, giu dau va nhan voi LSB.
 } // Ket thuc ham quy doi gia tri INA3221.
 
-bool readIna3221Channel(uint8_t channelIndex, float &busVoltageV, float &shuntVoltageV, float &currentA)
-{                                                                                    // Bat dau ham doc mot kenh INA3221.
-  const uint8_t shuntRegister = INA3221_REGISTER_CH1_SHUNT + channelIndex * 2;       // Tinh thanh ghi shunt cua kenh.
-  const uint8_t busRegister = INA3221_REGISTER_CH1_BUS + channelIndex * 2;           // Tinh thanh ghi bus cua kenh.
-  int16_t rawShunt = 0;                                                              // Luu gia tri shunt tho.
-  int16_t rawBus = 0;                                                                // Luu gia tri bus tho.
+bool readIna3221Channel(uint8_t channelIndex, int16_t &rawBus, int16_t &rawShunt, float &busVoltageV,
+                        float &shuntVoltageV, float &currentA)
+{                                                                              // Bat dau ham doc mot kenh INA3221.
+  const uint8_t shuntRegister = INA3221_REGISTER_CH1_SHUNT + channelIndex * 2; // Tinh thanh ghi shunt cua kenh.
+  const uint8_t busRegister = INA3221_REGISTER_CH1_BUS + channelIndex * 2;     // Tinh thanh ghi bus cua kenh.
+  const bool shuntOk = ina3221ReadRegister(shuntRegister, rawShunt);           // Doc raw shunt.
+  const bool busOk = ina3221ReadRegister(busRegister, rawBus);                 // Doc raw bus.
 
-  if (!ina3221ReadRegister(shuntRegister, rawShunt) || !ina3221ReadRegister(busRegister, rawBus)) // Doc shunt va bus.
-  {                                                                                                // Bat dau nhanh xu ly loi doc.
-    return false;                                                                                  // Bao doc kenh that bai.
+  if (!shuntOk || !busOk) // Kiem tra doc du ca hai thanh ghi cua kenh chua.
+  {                       // Bat dau nhanh xu ly loi doc.
+    return false;         // Bao doc kenh that bai.
   } // Ket thuc nhanh xu ly loi doc.
 
   shuntVoltageV = ina3221RawToVoltage(rawShunt, INA3221_SHUNT_LSB_V); // Quy doi dien ap tren shunt.
@@ -231,65 +284,75 @@ bool readIna3221Channel(uint8_t channelIndex, float &busVoltageV, float &shuntVo
   return true;                                                        // Bao doc kenh thanh cong.
 } // Ket thuc ham doc mot kenh INA3221.
 
-void printIna3221Readings() // Doc va in 3 kenh INA3221 ra Serial Monitor.
-{                           // Bat dau ham in gia tri INA3221.
-  Serial.print(F("[INA3221] ")); // In tien to log INA3221.
+void printIna3221Values() // In gia tri dien ap va dong dien cua 3 kenh INA3221.
+{                         // Bat dau ham in gia tri INA3221.
+#if INA3221_VALUE_LOG_ENABLE
+  uint8_t okCount = 0;             // Dem so kenh doc thanh cong.
+  Serial.print(F("[INA3221] t=")); // In tien to thoi gian log.
+  Serial.print(millis());          // In millis hien tai.
+  Serial.print(F("ms addr=0x"));   // In dia chi INA dang dung.
+  if (ina3221Address < 0x10)       // Kiem tra co can them so 0 khong.
+  {                                // Bat dau nhanh them so 0.
+    Serial.print('0');             // In so 0 dau.
+  } // Ket thuc nhanh them so 0.
+  Serial.print(ina3221Address, HEX); // In dia chi INA dang dung.
 
-  for (uint8_t channelIndex = 0; channelIndex < 3; ++channelIndex) // Duyet 3 kenh INA3221.
-  {                                                               // Bat dau than vong lap doc kenh.
-    float busVoltageV = 0.0f;                                     // Luu dien ap bus.
-    float shuntVoltageV = 0.0f;                                   // Luu dien ap tren shunt.
-    float currentA = 0.0f;                                        // Luu dong dien tinh toan.
+  for (uint8_t channelIndex = 0; channelIndex < 3; ++channelIndex) // Doc va in tung kenh.
+  {                                                                // Bat dau vong lap tung kenh.
+    int16_t rawBus = 0;                                            // Luu thanh ghi bus raw.
+    int16_t rawShunt = 0;                                          // Luu thanh ghi shunt raw.
+    float busVoltageV = 0.0f;                                      // Luu dien ap bus.
+    float shuntVoltageV = 0.0f;                                    // Luu dien ap shunt.
+    float currentA = 0.0f;                                         // Luu dong dien.
+    const bool ok = readIna3221Channel(channelIndex, rawBus, rawShunt, busVoltageV, shuntVoltageV, currentA);
 
-    if (!readIna3221Channel(channelIndex, busVoltageV, shuntVoltageV, currentA)) // Kiem tra doc kenh co thanh cong khong.
-    {                                                                           // Bat dau nhanh xu ly loi doc.
-      Serial.print(F("read failed CH"));                                        // In thong bao loi doc.
-      Serial.println(channelIndex + 1);                                         // In so kenh loi va xuong dong.
-      ina3221Online = false;                                                    // Cho phep thu cau hinh lai lan sau.
-      return;                                                                   // Thoat vi du lieu dong khong day du.
-    } // Ket thuc nhanh xu ly loi doc.
+    Serial.print(F(" | CH"));        // In nhan kenh.
+    Serial.print(channelIndex + 1);  // In so kenh.
+    if (!ok)                         // Kiem tra doc kenh co loi khong.
+    {                                // Bat dau nhanh kenh loi.
+      Serial.print(F(" read=FAIL")); // Bao loi doc kenh.
+      continue;                      // Chuyen sang kenh tiep theo.
+    } // Ket thuc nhanh kenh loi.
 
-    Serial.print(F("CH"));              // In nhan kenh.
-    Serial.print(channelIndex + 1);     // In so kenh.
-    Serial.print(F(" bus="));           // In nhan dien ap bus.
-    Serial.print(busVoltageV, 3);       // In dien ap bus voi 3 chu so thap phan.
-    Serial.print(F("V shunt="));        // In nhan dien ap shunt.
-    Serial.print(shuntVoltageV * 1000.0f, 2); // In dien ap shunt theo mV.
-    Serial.print(F("mV current="));     // In nhan dong dien.
-    Serial.print(currentA, 3);          // In dong dien voi 3 chu so thap phan.
-    Serial.print(F("A"));               // In don vi dong dien.
+    ++okCount;                                // Tang so kenh doc thanh cong.
+    Serial.print(F(" bus="));                 // In nhan dien ap bus.
+    Serial.print(busVoltageV, 3);             // In dien ap bus.
+    Serial.print(F("V shunt="));              // In nhan dien ap shunt.
+    Serial.print(shuntVoltageV * 1000.0f, 2); // In dien ap shunt mV.
+    Serial.print(F("mV current="));           // In nhan dong dien.
+    Serial.print(currentA, 3);                // In dong dien A.
+    Serial.print(F("A"));                     // In don vi dong dien.
+  } // Ket thuc vong lap tung kenh.
 
-    if (channelIndex < 2)               // Kiem tra co can chen dau phan cach khong.
-    {                                   // Bat dau nhanh chen dau phan cach.
-      Serial.print(F(" | "));           // In dau phan cach giua cac kenh.
-    } // Ket thuc nhanh chen dau phan cach.
-  } // Ket thuc than vong lap doc kenh.
-
-  Serial.println(); // Ket thuc dong log INA3221.
+  Serial.print(F(" | status="));                                 // In nhan trang thai tong.
+  Serial.println(okCount == 3 ? F("ALL_OK") : F("READ_FAILED")); // In trang thai tong.
+  ina3221Online = okCount == 3;                                  // Neu loi thi cho phep cau hinh lai lan sau.
+#endif                                                           // Ket thuc khoi log gia tri INA.
 } // Ket thuc ham in gia tri INA3221.
 
-void updateIna3221Readings()     // Doc INA3221 theo chu ky khong chan loop.
-{                                // Bat dau ham cap nhat INA3221.
-  const uint32_t now = millis(); // Lay thoi gian hien tai.
-
-  if (now - ina3221LastSampleMs < INA3221_SAMPLE_INTERVAL_MS) // Kiem tra da den chu ky doc 0,2s chua.
-  {                                                           // Bat dau nhanh chua den chu ky.
-    return;                                                   // Thoat de loop tiep tuc xu ly viec khac.
+void updateIna3221ValueLog() // Cap nhat log gia tri INA3221 theo chu ky.
+{                            // Bat dau ham cap nhat log INA3221.
+#if INA3221_VALUE_LOG_ENABLE
+  const uint32_t now = millis();                        // Lay thoi gian hien tai.
+  if (now - ina3221LastLogMs < INA3221_LOG_INTERVAL_MS) // Kiem tra da den chu ky log chua.
+  {                                                     // Bat dau nhanh chua den chu ky.
+    return;                                             // Thoat de loop tiep tuc viec khac.
   } // Ket thuc nhanh chua den chu ky.
 
-  ina3221LastSampleMs = now; // Cap nhat moc thoi gian doc gan nhat.
+  ina3221LastLogMs = now;                     // Cap nhat moc thoi gian log.
+  if (!ina3221Online)                         // Kiem tra INA da san sang chua.
+  {                                           // Bat dau nhanh thu cau hinh lai.
+    ina3221Online = configureIna3221();       // Thu cau hinh lai INA3221.
+    if (!ina3221Online)                       // Kiem tra cau hinh co thanh cong khong.
+    {                                         // Bat dau nhanh cau hinh loi.
+      Serial.println(F("[INA3221] offline")); // Bao INA dang offline.
+      return;                                 // Thoat vi chua co du lieu.
+    } // Ket thuc nhanh cau hinh loi.
+  } // Ket thuc nhanh thu cau hinh lai.
 
-  if (!ina3221Online)             // Kiem tra INA3221 da san sang chua.
-  {                               // Bat dau nhanh thu khoi tao INA3221.
-    ina3221Online = configureIna3221(); // Thu cau hinh lai khi chua thay thiet bi.
-    if (!ina3221Online)                 // Kiem tra cau hinh lai co thanh cong khong.
-    {                                   // Bat dau nhanh chua san sang.
-      return;                           // Thoat, lan sau se thu lai.
-    } // Ket thuc nhanh chua san sang.
-  } // Ket thuc nhanh thu khoi tao INA3221.
-
-  printIna3221Readings(); // Doc va in 3 kenh ra Serial Monitor.
-} // Ket thuc ham cap nhat INA3221.
+  printIna3221Values(); // In gia tri 3 kenh.
+#endif                  // Ket thuc khoi log gia tri INA.
+} // Ket thuc ham cap nhat log INA3221.
 
 void drawOledStatusDot()                                                                        // Ve cham trang thai neu dang duoc phep hien.
 {                                                                                               // Bat dau ham ve cham trang thai.
@@ -328,7 +391,7 @@ void drawOledDigits(uint8_t p1, uint8_t p2, uint8_t p3) // Ve ba nhom chu so len
 
 void renderOledContent(bool logRender) // Ve lai noi dung OLED theo che do hien tai.
 {                                      // Bat dau ham render OLED.
-  oled.clearBuffer();                  // Xoa buffer ve cua OLED.
+  oled.clearBuffer();                  // Xoa full-buffer ve cua OLED.
   oled.setDrawColor(1);                // Dat mau ve la trang/bat pixel.
 
   if (oledContentMode == OledContentMode::DIGITS)          // Kiem tra co can ve chu so khong.
@@ -337,7 +400,7 @@ void renderOledContent(bool logRender) // Ve lai noi dung OLED theo che do hien 
   } // Ket thuc nhanh ve chu so.
 
   drawOledStatusDot(); // Ve cham trang thai len buffer.
-  oled.sendBuffer();   // Gui buffer da ve ra man hinh OLED.
+  oled.sendBuffer();   // Gui full-buffer da ve ra man hinh OLED.
 
 #if SERIAL_DEBUG_ENABLE                             // Chi bien dich log render khi debug dang bat.
   if (logRender)                                    // Kiem tra lan render nay co can ghi log khong.
@@ -407,6 +470,13 @@ void updateOledStatusDot()       // Cap nhat cham trang thai OLED theo chu ky nh
   Serial.print(F("[OLED-BLINK] dot="));                      // In tien to log cham nhap nhay.
   Serial.println(oledStatusDotVisible ? F("on") : F("off")); // In trang thai cham moi.
 #endif                                                       // Ket thuc khoi log blink co dieu kien.
+
+#if OLED_DOT_LOG_ENABLE                                      // Chi bien dich log rieng cua cham OLED khi duoc bat.
+  Serial.print(F("[OLED-DOT] t="));                          // In tien to thoi gian log cham.
+  Serial.print(now);                                         // In millis hien tai.
+  Serial.print(F("ms dot="));                                // In nhan trang thai cham.
+  Serial.println(oledStatusDotVisible ? F("on") : F("off")); // In trang thai cham.
+#endif                                                       // Ket thuc khoi log cham OLED.
 } // Ket thuc ham cap nhat cham trang thai.
 
 bool triggerOledServoCycle()                                                      // Kich hoat chu ky servo OLED.
@@ -457,11 +527,11 @@ void updateOledServoCycle()      // Cap nhat chu ky servo OLED khong chan loop.
   } // Ket thuc nhanh xu ly buoc quay ve.
 } // Ket thuc ham cap nhat servo OLED.
 
-uint16_t parseCommandNumber(const char *cmd, size_t len) // Chuyen lenh toan chu so thanh so nguyen.
-{                                                        // Bat dau ham chuyen lenh thanh so.
-  uint16_t value = 0;                                    // Luu gia tri lenh dang tinh.
-  for (size_t i = 0; i < len; ++i)                       // Duyet tung chu so trong lenh.
-  {                                                      // Bat dau than vong lap.
+uint16_t parseCommandNumber(const char *cmd, size_t len)        // Chuyen lenh toan chu so thanh so nguyen.
+{                                                               // Bat dau ham chuyen lenh thanh so.
+  uint16_t value = 0;                                           // Luu gia tri lenh dang tinh.
+  for (size_t i = 0; i < len; ++i)                              // Duyet tung chu so trong lenh.
+  {                                                             // Bat dau than vong lap.
     value = static_cast<uint16_t>(value * 10 + (cmd[i] - '0')); // Tich luy gia tri thap phan.
   } // Ket thuc than vong lap.
   return value; // Tra ve gia tri lenh.
@@ -501,57 +571,57 @@ void processCommand(const char *cmd) // Xu ly lenh Serial da tach hoan chinh.
     return;                                                   // Ket thuc xu ly lenh.
   } // Ket thuc nhanh xu ly lenh 5 ky tu.
 
-  if (isAllDigits(cmd, len))                                        // Kiem tra lenh co phai dang so khong.
-  {                                                                 // Bat dau nhanh xu ly lenh so.
-    const uint16_t commandNumber = parseCommandNumber(cmd, len);    // Chuyen lenh sang so nguyen.
-    switch (commandNumber)                                          // Chon hanh dong theo ma lenh.
-    {                                                               // Bat dau switch lenh so.
-    case 3:                                                         // Lenh 3 dua FontCam ve home.
-      servoFontCam.write(SERVO_FONTCAM_HOME_ANGLE);                 // Dat servo FontCam ve goc home.
-      logLine(F("[ACT] "), F("ServoFontCam -> 0 deg"));             // Ghi log FontCam ve home.
-      return;                                                       // Ket thuc xu ly lenh.
-    case 4:                                                         // Lenh 4 dua FontCam den goc lam viec.
-      servoFontCam.write(SERVO_FONTCAM_WORK_ANGLE);                 // Dat servo FontCam den goc lam viec.
-      logLine(F("[ACT] "), F("ServoFontCam -> 45 deg"));            // Ghi log FontCam den goc lam viec.
-      return;                                                       // Ket thuc xu ly lenh.
-    case 5:                                                         // Lenh 5 dua RearCam ve home.
-      logLine(F("[CMD] "), F("5 -> ServoRearCam HOME 0 deg"));      // Ghi log y nghia lenh 5.
-      setRearCamAngle(SERVO_REARCAM_HOME_ANGLE);                    // Dat RearCam ve home.
-      return;                                                       // Ket thuc xu ly lenh.
-    case 6:                                                         // Lenh 6 dua RearCam den goc lam viec.
-      logLine(F("[CMD] "), F("6 -> ServoRearCam WORK 45 deg"));     // Ghi log y nghia lenh 6.
-      setRearCamAngle(SERVO_REARCAM_WORK_ANGLE);                    // Dat RearCam den goc lam viec.
-      return;                                                       // Ket thuc xu ly lenh.
-    case 8:                                                         // Lenh 8 kich chu ky servo OLED.
-      triggerOledServoCycle();                                      // Kich chu ky servo OLED.
-      return;                                                       // Ket thuc xu ly lenh.
-    case 9:                                                         // Lenh 9 bat relay D9/B+.
-      relaySet(PIN_RELAY_BPLUS, F("RelayD9_Bplus"), true);          // Bat relay B+ tren D9.
-      return;                                                       // Ket thuc xu ly lenh.
-    case 10:                                                        // Lenh 10 tat relay D9/B+.
-      relaySet(PIN_RELAY_BPLUS, F("RelayD9_Bplus"), false);         // Tat relay B+ tren D9.
-      return;                                                       // Ket thuc xu ly lenh.
-    case 11:                                                        // Lenh 11 bat relay D10.
-      relaySet(PIN_RELAY_D10, F("RelayD10"), true);                 // Bat relay D10.
-      return;                                                       // Ket thuc xu ly lenh.
-    case 12:                                                        // Lenh 12 tat relay D10.
-      relaySet(PIN_RELAY_D10, F("RelayD10"), false);                // Tat relay D10.
-      return;                                                       // Ket thuc xu ly lenh.
-    case 13:                                                        // Lenh 13 bat relay D11.
-      relaySet(PIN_RELAY_D11, F("RelayD11"), true);                 // Bat relay D11.
-      return;                                                       // Ket thuc xu ly lenh.
-    case 14:                                                        // Lenh 14 tat relay D11.
-      relaySet(PIN_RELAY_D11, F("RelayD11"), false);                // Tat relay D11.
-      return;                                                       // Ket thuc xu ly lenh.
-    case 15:                                                        // Lenh 15 bat relay D12.
-      relaySet(PIN_RELAY_D12, F("RelayD12"), true);                 // Bat relay D12.
-      return;                                                       // Ket thuc xu ly lenh.
-    case 16:                                                        // Lenh 16 tat relay D12.
-      relaySet(PIN_RELAY_D12, F("RelayD12"), false);                // Tat relay D12.
-      return;                                                       // Ket thuc xu ly lenh.
-    default:                                                        // Xu ly lenh so khong ho tro.
-      logLine(F("[WARN] "), F("Unknown numeric command"));          // Ghi log lenh so khong biet.
-      return;                                                       // Ket thuc xu ly lenh.
+  if (isAllDigits(cmd, len))                                     // Kiem tra lenh co phai dang so khong.
+  {                                                              // Bat dau nhanh xu ly lenh so.
+    const uint16_t commandNumber = parseCommandNumber(cmd, len); // Chuyen lenh sang so nguyen.
+    switch (commandNumber)                                       // Chon hanh dong theo ma lenh.
+    {                                                            // Bat dau switch lenh so.
+    case 3:                                                      // Lenh 3 dua FontCam ve home.
+      servoFontCam.write(SERVO_FONTCAM_HOME_ANGLE);              // Dat servo FontCam ve goc home.
+      logLine(F("[ACT] "), F("ServoFontCam -> 0 deg"));          // Ghi log FontCam ve home.
+      return;                                                    // Ket thuc xu ly lenh.
+    case 4:                                                      // Lenh 4 dua FontCam den goc lam viec.
+      servoFontCam.write(SERVO_FONTCAM_WORK_ANGLE);              // Dat servo FontCam den goc lam viec.
+      logLine(F("[ACT] "), F("ServoFontCam -> 25 deg"));         // Ghi log FontCam den goc lam viec.
+      return;                                                    // Ket thuc xu ly lenh.
+    case 5:                                                      // Lenh 5 dua RearCam ve home.
+      logLine(F("[CMD] "), F("5 -> ServoRearCam HOME 0 deg"));   // Ghi log y nghia lenh 5.
+      setRearCamAngle(SERVO_REARCAM_HOME_ANGLE);                 // Dat RearCam ve home.
+      return;                                                    // Ket thuc xu ly lenh.
+    case 6:                                                      // Lenh 6 dua RearCam den goc lam viec.
+      logLine(F("[CMD] "), F("6 -> ServoRearCam WORK 25 deg"));  // Ghi log y nghia lenh 6.
+      setRearCamAngle(SERVO_REARCAM_WORK_ANGLE);                 // Dat RearCam den goc lam viec.
+      return;                                                    // Ket thuc xu ly lenh.
+    case 8:                                                      // Lenh 8 kich chu ky servo OLED.
+      triggerOledServoCycle();                                   // Kich chu ky servo OLED.
+      return;                                                    // Ket thuc xu ly lenh.
+    case 9:                                                      // Lenh 9 bat relay D9/B+.
+      relaySet(PIN_RELAY_BPLUS, F("RelayD9_Bplus"), true);       // Bat relay B+ tren D9.
+      return;                                                    // Ket thuc xu ly lenh.
+    case 10:                                                     // Lenh 10 tat relay D9/B+.
+      relaySet(PIN_RELAY_BPLUS, F("RelayD9_Bplus"), false);      // Tat relay B+ tren D9.
+      return;                                                    // Ket thuc xu ly lenh.
+    case 11:                                                     // Lenh 11 bat relay D10.
+      relaySet(PIN_RELAY_D10, F("RelayD10"), true);              // Bat relay D10.
+      return;                                                    // Ket thuc xu ly lenh.
+    case 12:                                                     // Lenh 12 tat relay D10.
+      relaySet(PIN_RELAY_D10, F("RelayD10"), false);             // Tat relay D10.
+      return;                                                    // Ket thuc xu ly lenh.
+    case 13:                                                     // Lenh 13 bat relay D11.
+      relaySet(PIN_RELAY_D11, F("RelayD11"), true);              // Bat relay D11.
+      return;                                                    // Ket thuc xu ly lenh.
+    case 14:                                                     // Lenh 14 tat relay D11.
+      relaySet(PIN_RELAY_D11, F("RelayD11"), false);             // Tat relay D11.
+      return;                                                    // Ket thuc xu ly lenh.
+    case 15:                                                     // Lenh 15 bat relay D12.
+      relaySet(PIN_RELAY_D12, F("RelayD12"), true);              // Bat relay D12.
+      return;                                                    // Ket thuc xu ly lenh.
+    case 16:                                                     // Lenh 16 tat relay D12.
+      relaySet(PIN_RELAY_D12, F("RelayD12"), false);             // Tat relay D12.
+      return;                                                    // Ket thuc xu ly lenh.
+    default:                                                     // Xu ly lenh so khong ho tro.
+      logLine(F("[WARN] "), F("Unknown numeric command"));       // Ghi log lenh so khong biet.
+      return;                                                    // Ket thuc xu ly lenh.
     } // Ket thuc switch lenh so.
   } // Ket thuc nhanh xu ly lenh so.
 
@@ -612,10 +682,12 @@ void readSerialCommands()                                    // Doc va tach lenh
   } // Ket thuc nhanh kiem tra timeout lenh.
 } // Ket thuc ham doc Serial.
 
-void setup()                     // Ham khoi tao chay mot lan khi Arduino boot.
-{                                // Bat dau ham setup.
-  Serial.begin(SERIAL_BAUDRATE); // Khoi dong Serial voi baudrate da dinh nghia.
-  Wire.begin();                  // Khoi dong bus I2C dung chung cho OLED va INA3221.
+void setup()                                 // Ham khoi tao chay mot lan khi Arduino boot.
+{                                            // Bat dau ham setup.
+  Serial.begin(SERIAL_BAUDRATE);             // Khoi dong Serial voi baudrate da dinh nghia.
+  Wire.begin();                              // Khoi dong bus I2C dung chung cho OLED va INA3221.
+  Wire.setClock(OLED_I2C_CLOCK_HZ);          // Dat bus I2C 400 kHz cho OLED full-buffer.
+  Wire.setWireTimeout(I2C_TIMEOUT_US, true); // Reset TWI neu giao tiep I2C bi treo qua timeout.
 
   configureRelayOutput(PIN_RELAY_BPLUS); // Tat relay B+ D9 ngay khi khoi dong.
   configureRelayOutput(PIN_RELAY_D10);   // Tat relay D10 ngay khi khoi dong.
@@ -625,6 +697,8 @@ void setup()                     // Ham khoi tao chay mot lan khi Arduino boot.
   servoOled.attach(PIN_SERVO_OLED, SERVO_OLED_MIN_PULSE_US, SERVO_OLED_MAX_PULSE_US); // Gan servo OLED vao chan D3 voi dai xung rieng.
   servoFontCam.attach(PIN_SERVO_FONTCAM);                                             // Gan servo camera truoc vao chan D2.
   servoRearCam.attach(PIN_SERVO_REARCAM);                                             // Gan servo camera sau vao chan D8.
+  logLine(F("[SETUP] "), F("ServoOled attached on D3"));                              // Ghi log servo OLED da gan.
+  logLine(F("[SETUP] "), F("ServoFontCam attached on D2"));                           // Ghi log servo camera truoc da gan.
   logLine(F("[SETUP] "), F("ServoRearCam attached on D8"));                           // Ghi log servo camera sau da gan.
 
   servoOled.write(SERVO_OLED_MIN_ANGLE);                // Dua servo OLED ve goc ban dau.
@@ -637,15 +711,14 @@ void setup()                     // Ham khoi tao chay mot lan khi Arduino boot.
   oledStatusDotLastToggleMs = millis(); // Luu moc thoi gian nhap nhay ban dau.
   oledClearScreen();                    // Xoa man hinh OLED sau khi khoi tao.
   ina3221Online = configureIna3221();   // Khoi tao INA3221 neu da gan tren bus I2C.
-  ina3221LastSampleMs = millis();       // Bat dau chu ky doc INA3221 sau 0,2 giay.
 
   logLine(F("[ACT] "), F("Boot completed: Serial 9600, relays OFF, 3 servos attached")); // Ghi log boot hoan tat.
 } // Ket thuc ham setup.
 
-void loop()               // Ham lap chinh cua firmware.
-{                         // Bat dau ham loop.
-  readSerialCommands();   // Doc va xu ly lenh Serial neu co.
-  updateOledServoCycle(); // Cap nhat chu ky servo OLED khong chan chuong trinh.
-  updateOledStatusDot();  // Cap nhat cham trang thai OLED.
-  updateIna3221Readings(); // Doc va in INA3221 moi 0,2 giay.
+void loop()                // Ham lap chinh cua firmware.
+{                          // Bat dau ham loop.
+  readSerialCommands();    // Doc va xu ly lenh Serial neu co.
+  updateOledServoCycle();  // Cap nhat chu ky servo OLED khong chan chuong trinh.
+  updateOledStatusDot();   // Cap nhat cham trang thai OLED.
+  updateIna3221ValueLog(); // In gia tri dien ap/dong dien INA3221 theo chu ky.
 } // Ket thuc ham loop.

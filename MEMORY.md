@@ -6,7 +6,7 @@ phai bo nho chay tren Arduino va khong duoc dung de thay doi hanh vi firmware.
 ## Muc Tieu Du An
 
 Day la du an PlatformIO cho Arduino Nano ATmega328. Firmware trong `src/main.cpp`
-dieu khien relay, 3 servo, man hinh OLED SH1106 I2C, va doc INA3221 qua Serial
+dieu khien relay, 4 servo, man hinh OLED SH1106 I2C, va doc INA3221 qua Serial
 9600 baud.
 
 ## Nguyen Tac Khi Agent Lam Viec
@@ -33,7 +33,8 @@ C:\Users\Dung.NT213690\.platformio\penv\Scripts\pio.exe run -e nanoatmega328new
 - Servo FontCam dung D2, home 0 do, work 25 do.
 - Servo RearCam dung D8, home 0 do, work 25 do.
 - Servo OLED dung D3, min pulse 544 us, max pulse 2400 us, target 120 do.
-- Khong con servo SDcard trong source hien tai.
+- Servo SDcard dung D5, home 0 do, work 104 do, di chuyen tung buoc 1 do moi
+  10 ms, giu o work 100 ms roi tu dong quay ve home.
 - I2C dung SDA=A4, SCL=A5.
 - OLED dung SH1106 128x64 qua I2C, U8g2 full-buffer `U8G2_SH1106_128X64_NONAME_F_HW_I2C`,
   xoay `U8G2_R2`, clock 400 kHz de cap nhat man hinh muot hon.
@@ -59,8 +60,11 @@ C:\Users\Dung.NT213690\.platformio\penv\Scripts\pio.exe run -e nanoatmega328new
 - `14`: tat relay D11.
 - `15`: bat relay D12.
 - `16`: tat relay D12.
+- `17`: Servo SDcard quay tu 0 den 104 do, giu 100 ms, roi quay ve 0 do.
 - `44`: xoa OLED.
 - Lenh 5 chu so: hien thi 3 cum so len OLED.
+
+Lenh test tam `1` va `2` cho Servo SDcard da duoc go bo sau khi hoan tat test.
 
 ## Ghi Chu I2C Gan Nhat
 

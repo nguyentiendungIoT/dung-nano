@@ -13,6 +13,7 @@ constexpr uint8_t PIN_RELAY_D12 = 12;    // Gan chan D12 cho relay bo sung 3.
 constexpr uint8_t PIN_SERVO_FONTCAM = 2; // Gan chan D2 cho servo camera truoc.
 constexpr uint8_t PIN_SERVO_REARCAM = 8; // Gan chan D8 cho servo camera sau.
 constexpr uint8_t PIN_SERVO_OLED = 3;    // Gan chan D3 cho servo OLED.
+constexpr uint8_t PIN_SERVO_SD_CARD = 5; // Gan chan D5 cho servo khay the SD.
 
 constexpr uint8_t RELAY_ON = HIGH; // Dinh nghia muc tin hieu bat relay.
 constexpr uint8_t RELAY_OFF = LOW; // Dinh nghia muc tin hieu tat relay.
@@ -28,6 +29,11 @@ constexpr uint8_t SERVO_FONTCAM_WORK_ANGLE = 17; // Dinh nghia goc lam viec cua 
 constexpr uint8_t SERVO_REARCAM_HOME_ANGLE = 25; // Dinh nghia goc home cua servo camera sau.
 constexpr uint8_t SERVO_REARCAM_WORK_ANGLE = 13; // Dinh nghia goc lam viec cua servo camera sau.
 constexpr uint8_t SERVO_ANGLE_UNKNOWN = 255;     // Dinh nghia gia tri danh dau chua biet goc servo.
+
+constexpr uint8_t SERVO_SD_CARD_HOME_ANGLE = 0;  // Dinh nghia goc thu the SD vao.
+constexpr uint8_t SERVO_SD_CARD_WORK_ANGLE = 110; // Dinh nghia goc day the SD ra.
+constexpr uint32_t SERVO_SD_CARD_STEP_INTERVAL_MS = 10; // Moi buoc 1 do cach nhau 10 ms de servo quay muot.
+constexpr uint32_t SERVO_SD_CARD_HOLD_MS = 500;         // Giu servo o goc 110 do trong 0,1 giay.
 
 constexpr uint8_t SERVO_OLED_MIN_ANGLE = 0;         // Dinh nghia goc ban dau cua servo OLED.
 constexpr uint8_t SERVO_OLED_TARGET_ANGLE = 120;    // Dinh nghia goc dich cua servo OLED.
@@ -65,6 +71,7 @@ constexpr uint32_t MAX_POWER_MW = 99999;     // Gioi han truong cong suat 5 chu 
 Servo servoFontCam; // Tao doi tuong servo cho camera truoc.
 Servo servoRearCam; // Tao doi tuong servo cho camera sau.
 Servo servoOled;    // Tao doi tuong servo cho co cau OLED.
+Servo servoSdCard;  // Tao doi tuong servo cho khay the SD.
 
 U8G2_SH1106_128X64_NONAME_1_HW_I2C oled(U8G2_R2, U8X8_PIN_NONE); // Tao driver OLED SH1106 page-buffer de giam SRAM.
 
@@ -81,16 +88,27 @@ enum class OledContentMode : uint8_t // Khai bao cac che do noi dung hien thi OL
   DIGITS                             // Che do hien thi cac chu so nhan tu Serial.
 }; // Ket thuc enum che do hien thi OLED.
 
+enum class SdCardServoState : uint8_t // Khai bao cac trang thai cua chu ky servo khay the SD.
+{
+  IDLE,
+  MOVING_OUT,
+  HOLDING,
+  MOVING_HOME
+};
+
 OledServoState oledServoState = OledServoState::IDLE;     // Luu trang thai hien tai cua servo OLED.
 OledContentMode oledContentMode = OledContentMode::CLEAR; // Luu che do noi dung hien tai cua OLED.
+SdCardServoState sdCardServoState = SdCardServoState::IDLE; // Luu trang thai chu ky servo khay the SD.
 
 uint8_t rearCamAngle = SERVO_ANGLE_UNKNOWN;           // Luu goc gan nhat cua servo camera sau.
+uint8_t sdCardAngle = SERVO_ANGLE_UNKNOWN;            // Luu goc gan nhat cua servo khay the SD.
 uint8_t ina3221Address = INA3221_I2C_ADDRESS_DEFAULT; // Luu dia chi INA3221 dang duoc firmware su dung.
 uint8_t oledDigitP1 = 0;                              // Luu chu so nhom 1 de ve len OLED.
 uint8_t oledDigitP2 = 0;                              // Luu so nhom 2 de ve len OLED.
 uint8_t oledDigitP3 = 0;                              // Luu so nhom 3 de ve len OLED.
 
 uint32_t oledServoStartMs = 0;          // Luu moc thoi gian bat dau trang thai servo OLED.
+uint32_t sdCardServoLastStepMs = 0;     // Luu moc thoi gian buoc cham gan nhat cua servo khay the SD.
 uint32_t oledStatusDotLastToggleMs = 0; // Luu moc thoi gian lan doi cham trang thai gan nhat.
 uint32_t ina3221LastFrameMs = 0;        // Luu moc thoi gian lan gui frame INA3221 gan nhat.
 
@@ -193,6 +211,66 @@ void setRearCamAngle(uint8_t targetAngle)                                       
   rearCamAngle = targetAngle;                                                                                               // Cap nhat bien nho goc hien tai.
   logLine(F("[ACT] "), targetAngle == SERVO_REARCAM_HOME_ANGLE ? F("ServoRearCam -> 0 deg") : F("ServoRearCam -> 25 deg")); // Ghi log goc moi.
 } // Ket thuc ham dat goc camera sau.
+
+void triggerSdCardServoCycle() // Khoi dong chu ky day the SD ra roi thu ve.
+{
+  if (sdCardServoState != SdCardServoState::IDLE)
+  {
+    logLine(F("[WARN] "), F("ServoSdCard cycle already running, command ignored"));
+    return;
+  }
+
+  sdCardServoLastStepMs = millis();
+  sdCardServoState = sdCardAngle >= SERVO_SD_CARD_WORK_ANGLE
+                         ? SdCardServoState::HOLDING
+                         : SdCardServoState::MOVING_OUT;
+  logLine(F("[CMD] "), F("17 -> ServoSdCard cycle to 104 deg"));
+}
+
+void updateSdCardServoCycle() // Cap nhat chu ky servo SD khong chan cac tac vu khac.
+{
+  if (sdCardServoState == SdCardServoState::IDLE)
+  {
+    return;
+  }
+
+  const uint32_t now = millis();
+  if (sdCardServoState == SdCardServoState::HOLDING)
+  {
+    if (now - sdCardServoLastStepMs >= SERVO_SD_CARD_HOLD_MS)
+    {
+      sdCardServoState = SdCardServoState::MOVING_HOME;
+      sdCardServoLastStepMs = now;
+    }
+    return;
+  }
+
+  if (now - sdCardServoLastStepMs < SERVO_SD_CARD_STEP_INTERVAL_MS)
+  {
+    return;
+  }
+  sdCardServoLastStepMs = now;
+
+  if (sdCardServoState == SdCardServoState::MOVING_OUT)
+  {
+    ++sdCardAngle;
+    servoSdCard.write(sdCardAngle);
+    if (sdCardAngle >= SERVO_SD_CARD_WORK_ANGLE)
+    {
+      sdCardServoState = SdCardServoState::HOLDING;
+      logLine(F("[ACT] "), F("ServoSdCard reached 104 deg, holding 0.1 s"));
+    }
+    return;
+  }
+
+  --sdCardAngle;
+  servoSdCard.write(sdCardAngle);
+  if (sdCardAngle == SERVO_SD_CARD_HOME_ANGLE)
+  {
+    sdCardServoState = SdCardServoState::IDLE;
+    logLine(F("[ACT] "), F("ServoSdCard returned to home 0 deg"));
+  }
+}
 
 void configureOledForCamera()                                                                   // Khoi tao va cau hinh man hinh OLED.
 {                                                                                               // Bat dau ham cau hinh OLED.
@@ -679,6 +757,9 @@ void processCommand(const char *cmd) // Xu ly lenh Serial da tach hoan chinh.
     case 16:                                                     // Lenh 16 tat relay D12.
       relaySet(PIN_RELAY_D12, F("RelayD12"), false);             // Tat relay D12.
       return;                                                    // Ket thuc xu ly lenh.
+    case 17:                                                     // Lenh 17 kich chu ky servo khay the SD.
+      triggerSdCardServoCycle();                                 // Quay den 104 do, giu 0,1 giay roi ve home.
+      return;                                                    // Ket thuc xu ly lenh.
     default:                                                     // Xu ly lenh so khong ho tro.
       logLine(F("[WARN] "), F("Unknown numeric command"));       // Ghi log lenh so khong biet.
       return;                                                    // Ket thuc xu ly lenh.
@@ -757,14 +838,19 @@ void setup()                                 // Ham khoi tao chay mot lan khi Ar
   servoOled.attach(PIN_SERVO_OLED, SERVO_OLED_MIN_PULSE_US, SERVO_OLED_MAX_PULSE_US); // Gan servo OLED vao chan D3 voi dai xung rieng.
   servoFontCam.attach(PIN_SERVO_FONTCAM);                                             // Gan servo camera truoc vao chan D2.
   servoRearCam.attach(PIN_SERVO_REARCAM);                                             // Gan servo camera sau vao chan D8.
+  servoSdCard.attach(PIN_SERVO_SD_CARD);                                              // Gan servo khay the SD vao chan D5.
   logLine(F("[SETUP] "), F("ServoOled attached on D3"));                              // Ghi log servo OLED da gan.
   logLine(F("[SETUP] "), F("ServoFontCam attached on D2"));                           // Ghi log servo camera truoc da gan.
   logLine(F("[SETUP] "), F("ServoRearCam attached on D8"));                           // Ghi log servo camera sau da gan.
+  logLine(F("[SETUP] "), F("ServoSdCard attached on D5"));                            // Ghi log servo khay the SD da gan.
 
   servoOled.write(SERVO_OLED_MIN_ANGLE);                // Dua servo OLED ve goc ban dau.
   servoFontCam.write(SERVO_FONTCAM_HOME_ANGLE);         // Dua servo camera truoc ve home.
   logLine(F("[SETUP] "), F("ServoFontCam home=0 deg")); // Ghi log servo camera truoc da ve home.
   setRearCamAngle(SERVO_REARCAM_HOME_ANGLE);            // Dua servo camera sau ve home.
+  servoSdCard.write(SERVO_SD_CARD_HOME_ANGLE);           // Thu the SD vao ngay khi vua cap dien.
+  sdCardAngle = SERVO_SD_CARD_HOME_ANGLE;                // Dong bo trang thai goc khoi dong cua servo SD.
+  logLine(F("[SETUP] "), F("ServoSdCard home=0 deg")); // Ghi log servo khay the SD da ve home.
 
   configureOledForCamera();             // Khoi tao cau hinh man hinh OLED.
   oledStatusDotVisible = true;          // Bat hien cham trang thai luc khoi dong.
@@ -772,13 +858,14 @@ void setup()                                 // Ham khoi tao chay mot lan khi Ar
   oledClearScreen();                    // Xoa man hinh OLED sau khi khoi tao.
   ina3221Online = configureIna3221();   // Khoi tao INA3221 neu da gan tren bus I2C.
 
-  logLine(F("[ACT] "), F("Boot completed: Serial 9600, relays OFF, 3 servos attached")); // Ghi log boot hoan tat.
+  logLine(F("[ACT] "), F("Boot completed: Serial 9600, relays OFF, 4 servos attached")); // Ghi log boot hoan tat.
 } // Ket thuc ham setup.
 
 void loop()                // Ham lap chinh cua firmware.
 {                          // Bat dau ham loop.
   readSerialCommands();    // Doc va xu ly lenh Serial neu co.
   updateOledServoCycle();  // Cap nhat chu ky servo OLED khong chan chuong trinh.
+  updateSdCardServoCycle(); // Cap nhat chu ky servo SD cham ma khong chan chuong trinh.
   updateOledStatusDot();   // Cap nhat cham trang thai OLED.
   updateIna3221ComFrame(); // Gui frame dien ap/dong dien/cong suat moi 200 ms.
 } // Ket thuc ham loop.
